@@ -33,7 +33,9 @@
       if (/^https?:\/\//i.test(input)) return input;
       // Check if it's a search query (contains spaces OR doesn't look like a domain)
       if (input.includes(' ') || !input.match(/^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-z]{2,}(\/|$)/i)) {
-        return DDG.replace('%s', encodeURIComponent(input));
+        // Replace spaces with + for DuckDuckGo search
+        const searchQuery = input.replace(/ /g, '+');
+        return DDG.replace('%s', encodeURIComponent(searchQuery));
       }
       // It looks like a domain without protocol
       return 'https://' + input;
