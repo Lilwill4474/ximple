@@ -31,16 +31,23 @@
 
     function resolve(input) {
       if (/^https?:\/\//i.test(input)) return input;
-      if (!input.includes(' ') && /\.[a-z]{2,}(\/|$)/i.test(input)) return 'https://' + input;
-      return DDG.replace('%s', encodeURIComponent(input));
+      // Check if it's a search query (contains spaces OR doesn't look like a domain)
+      if (input.includes(' ') || !input.match(/^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-z]{2,}(\/|$)/i)) {
+        return DDG.replace('%s', encodeURIComponent(input));
+      }
+      // It looks like a domain without protocol
+      return 'https://' + input;
     }
 
-    await Promise.all([
-      setWisp(localStorage.getItem('wispServer') || "wss://wisp.waved.site/"),
-      setTransport(localStorage.getItem('transport') || "libcurl")
-    ]);
-
-    await new Promise(r => setTimeout(r, 200));
+    // Wait for both promises to complete
+    try {
+      await Promise.all([
+        setWisp(localStorage.getItem('wispServer') || "wss://wisp.waved.site/"),
+        setTransport(localStorage.getItem('transport') || "libcurl")
+      ]);
+    } catch (err) {
+      console.error('Failed to initialize proxy:', err);
+    }
 
     const view = document.getElementById('view');
     const urlInput = document.getElementById('url');
@@ -54,18 +61,55 @@
     }
 
     async function go(input, push = true) {
+      if (!input) return;
+      
       const resolved = resolve(input);
-      if (push) { hist = hist.slice(0, idx + 1); hist.push(resolved); idx = hist.length - 1; }
+      
+      if (push) { 
+        hist = hist.slice(0, idx + 1); 
+        hist.push(resolved); 
+        idx = hist.length - 1; 
+      }
+      
       urlInput.value = resolved;
-      view.src = await getProxied(resolved);
+      
+      try {
+        const proxiedUrl = await getProxied(resolved);
+        view.src = proxiedUrl;
+      } catch (err) {
+        console.error('Failed to load URL:', err);
+        // Fallback - try loading directly if proxy fails
+        view.src = resolved;
+      }
+      
       updateNav();
     }
 
-    urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') go(urlInput.value.trim()); });
-    back.addEventListener('click', () => { if (idx > 0) go(hist[--idx], false); });
-    fwd.addEventListener('click', () => { if (idx < hist.length - 1) go(hist[++idx], false); });
-    document.getElementById('ref').addEventListener('click', () => { view.src = view.src; });
+    urlInput.addEventListener('keydown', e => { 
+      if (e.key === 'Enter') {
+        const value = urlInput.value.trim();
+        if (value) go(value);
+      }
+    });
+    
+    back.addEventListener('click', () => { 
+      if (idx > 0) go(hist[--idx], false); 
+    });
+    
+    fwd.addEventListener('click', () => { 
+      if (idx < hist.length - 1) go(hist[++idx], false); 
+    });
+    
+    document.getElementById('ref').addEventListener('click', () => { 
+      if (view.src) {
+        // Refresh the iframe properly
+        const currentSrc = view.src;
+        view.src = '';
+        setTimeout(() => { view.src = currentSrc; }, 10);
+      }
+    });
 
+    // Start with DuckDuckGo
     go("https://duckduckgo.com/");
   </script>
 </body>
